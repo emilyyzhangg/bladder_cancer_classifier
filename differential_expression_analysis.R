@@ -1,46 +1,32 @@
 library(DESeq2)
 library(tidyverse)
+library(dplyr)
 
 # load file
-bladder_data <- readRDS("./data/UROMOL_TaLG.teachingcohort.rds")
+bladder_data <- readRDS("/Users/emilyzhang/bladder_cancer_classifier/data/UROMOL_TaLG.teachingcohort.rds")
 
-# separate expression data
-expression_columns <- grep("^expr\\.", names(bladder_data), value = TRUE)
-clinical_data <- bladder_data %>% select(-all_of(expression_columns))
+recurrence_1 <- bladder_data[bladder_data$Recurrence == 1, ]
+recurrence_0 <- bladder_data[bladder_data$Recurrence == 0, ]
 
-# make deseq object
-count_matrix <- bladder_data %>%
-  select(all_of(expression_columns)) %>%
-  t() %>%
-  round() # rounding for deseq2 to work
+count_data <- cbind(recurrence_1$exprs[1:nrow(recurrence_0$exprs), ], recurrence_0$exprs)
 
-coldata <- clinical_data %>%
-  mutate(recurrence_rate = factor(recurrence_rate)) %>%
-  column_to_rownames("patient_id")
 
-dds <- DESeqDataSetFromMatrix(
-  countData = count_matrix,
-  colData = coldata,
-  design = ~ recurrence_rate
-)
+dds <- DESeqDataSetFromMatrix(countData = count_data,
+                              colData = col_data,
+                              design = ~ condition)
 
-# running DEA
+# 5. Run analysis
 dds <- DESeq(dds)
-results <- results(dds, alpha = 0.05)
+res <- results(dds, contrast=c("condition", "Recurrence", "No_Recurrence"))
 
-# identify significant genes
-significant_genes <- results %>%
-  as.data.frame() %>%
-  filter(padj < 0.05) %>%
-  rownames_to_column("gene") %>%
-  pull(gene)
+# 6. Get significant genes (padj < 0.05)
+sig_genes <- rownames(res)[which(res$padj < 0.05)]
 
-# create dataset with only differentially expressed genes
-filtered_data <- bladder_data %>%
-  select(
-    all_of(names(clinical_data)),
-    all_of(paste0("expr.", significant_genes))
-  )
+# 7. Create filtered dataset
+filtered_exprs <- count_data[sig_genes, ]
+clinical_data <- bladder_data %>% select(-exprs)
+final_data <- cbind(clinical_data, t(filtered_exprs))
 
-# save 
-write_csv(filtered_data, "./data/UROMOL_TaLG.teachingcohort_filted.csv")
+
+# 8. Save results
+write_csv(final_data, "recurrence_filtered_data.csv")
