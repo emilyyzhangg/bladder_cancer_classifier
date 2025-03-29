@@ -1,0 +1,2 @@
+[1] "C-index on Knowles data: 0.659076533839342"
+[1] "AUC on Knowles data: 0.640282131661442"
